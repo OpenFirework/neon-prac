@@ -32,17 +32,19 @@ float neon_FaceVerify(const float* feature1, const float* feature2,float* alsum)
   
   int nn = size >> 3;
    asm volatile(
-     "vmov.f32 q9, #0.0 \n"
-     "0: \n" 
+     "vmov.f32 q4, #0.0 \n"
+     "vmov.f32 q5, #0.0 \n"
+     "0: \n"
+     "pld [%2, #256] \n" 
      "vld1.f32 {d0-d3}, [%2]! \n"
+     "pld [%3, #256] \n" 
  	   "vld1.f32 {d4-d7}, [%3]! \n"
- 	   "vmul.f32 q4, q0, q2\n"
- 	   "vmul.f32 q5, q1, q3\n"  
-     "vadd.f32 q8, q4, q5 \n"
-     "vadd.f32 q9, q9, q8 \n"
-     "subs %0, #1 \n"
+ 	   "vmla.f32 q4, q0, q2\n"
+ 	   "subs %0, #1 \n"
+ 	   "vmla.f32 q5, q1, q3\n"  
      "bne 0b \n"
-     "vst1.f32 q9, [%1] \n"
+     "vadd.f32 q4, q4, q5\n"
+     "vst1.f32 q4, [%1] \n"
     :"=r"(nn), // %0
      "=r"(sum), // %1
      "=r"(m),
@@ -51,12 +53,12 @@ float neon_FaceVerify(const float* feature1, const float* feature2,float* alsum)
      "1"(sum),
      "2"(m),  
      "3"(w)   
-    : "cc", "memory", "q0", "q1", "q2", "q3", "q4","q5","q8", "q9"
+    : "cc", "memory", "q0", "q1", "q2", "q3", "q4","q5"
  	 
   );
- /* for(int i=0;i<4;i++) {
+  for(int i=0;i<4;i++) {
     simi += sum[i];
-  }*/
+  }
   return (simi + 1.0) / 2.0 ;
 }
 
@@ -76,18 +78,28 @@ int main() {
 	infile.close();
 	
 	float *value = (float*)memalign(16,32*sizeof(float));
+	float *temp = (float*)memalign(16,32*sizeof(float));
 	float *result = (float*)memalign(16,32*sizeof(float));
-	for(int i=0;i<8;i++) {
-	  value[i] = (i+1)*0.1;
+	memset(result,0,sizeof(float)*32);
+	for(int i=0;i<32;i++) {
+	  value[i] = i;
+	  temp[i] = i;
 	}
 	//32个64-bit寄存器(D0-D31)
 	//16个128-bit寄存器(Q0-Q15)
 	asm(
 	   "vld1.f32 {d0-d3}, [%1]! \n"
-	   "vst1.f32 {d0-d3}, [%0]! \n"
+	   "vld1.f32 {d4-d7}, [%2]! \n"
+	   "vmul.f32 q4, q0, q2 \n"
+	   "vmla.f32 q4, q4, q0 \n"
+	   "vst1.f32 {d8-d11}, [%0] \n"
 	   :"=r"(result)
-	   :"r"(value)
+	   :"r"(value),
+	    "r"(temp)
 	);
+	for(int i=0;i<4;i++) {
+		cout<<result[i]<<endl;
+	}
 	
 	
   float *sum =  (float*)memalign(16,4*sizeof(float));
@@ -103,7 +115,7 @@ int main() {
 	  memcpy(temp_1, in_2, sizeof(float)*512*100);
 		start = NowMicros();
 		for(int i=0;i<100;i++) {
-			score = FaceVerify(temp+512*i, temp_1+512*i);
+			score = FaceVerify(temp, temp_1);
 		}
 	 end = NowMicros();
 	 delete[] temp;
