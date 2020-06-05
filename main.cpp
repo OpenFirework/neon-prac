@@ -13,6 +13,51 @@ int32_t NowMicros() {
 
 using namespace std;
 
+double ncnn_normal(const float* feature1, const float* feature2){
+     float sum = 0.f;
+     int channels = 1; 
+     int size = 512;
+     const float* w = feature1;
+     
+     float32x4_t _sum = vdupq_n_f32(0.f);
+     float32x4_t _sum2 = vdupq_n_f32(0.f);
+
+		const float* m = feature2;
+    int nn = size >> 3;
+    asm volatile( 
+								 "0: \n" 
+								 "pld [%1, #256] \n" 
+								 "vld1.f32 {d0-d3}, [%1 :128]! \n" 
+								 "pld [%2, #256] \n" 
+								 "vld1.f32 {d4-d7}, [%2]! \n" 
+								 "vmla.f32 %q3, q0, q2 \n" 
+								 "subs %0, #1 \n" 
+								 "vmla.f32 %q4, q1, q3 \n" 
+								 "bne 0b \n" 
+								 : "=r"(nn), // %0 
+								 "=r"(m), // %1 
+								 "=r"(w), // %2 
+								 "=w"(_sum), // %3 
+								 "=w"(_sum2) // %4 
+								 : "0"(nn), 
+								 "1"(m), 
+								 "2"(w), 
+								 "3"(_sum), 
+								 "4"(_sum2) 
+								 : "cc", "memory", "q0", "q1", "q2", "q3" 
+		);
+    	
+	 _sum = vaddq_f32(_sum, _sum2); 
+
+	 float32x2_t _sumss = vadd_f32(vget_low_f32(_sum), vget_high_f32(_sum)); 
+	 _sumss = vpadd_f32(_sumss, _sumss); 
+	 sum += vget_lane_f32(_sumss, 0); 
+
+ return sum * 0.5f + 0.5f;
+}
+
+
+
 float FaceVerify(const float* feature1, const float* feature2) {
   float simi = 0;
  
@@ -191,37 +236,41 @@ int main() {
 	
 	
 	float *out_feature = new float[512];
+	float *out_feature_1 = new float[512];
 	
 	int start = 0;
 	int end = 0;
-	start = NowMicros();
+
 	//printf("%0x\n",out_feature);
 	
 	neon_normalize(in_2,out_feature);
+
+	normalize(in_1+128,out_feature_1);
+
+	normalize(in_2,out_feature);
+	
+	
+	float score; 
+	start = NowMicros();
+	for(int i=0;i<100;i++)
+	score = FaceVerify(out_feature,out_feature_1);
 	end = NowMicros();
 	printf("%dus\n",(end-start));
-	
-
-for(int i=0;i<20;i++) {
-	  cout<<out_feature[i]<<",";
-	}
-	cout<<"\n";
+	cout<<score<<endl;
 	
 	start = NowMicros();
-	normalize(in_2,out_feature);
+	for(int i=0;i<100;i++)
+	score = neon_FaceVerify(out_feature,out_feature_1);
+	end = NowMicros();
+	
+	printf("%dus\n",(end-start));
+	
+	start = NowMicros();
+	for(int i=0;i<100;i++)
+	score = ncnn_normal(out_feature,out_feature_1);
 	end = NowMicros();
 	printf("%dus\n",(end-start));
 	
-	for(int i=0;i<20;i++) {
-	  cout<<out_feature[i]<<",";
-	}
-	end = NowMicros();
-	printf("%dus\n",(end-start));
-	
-	float score = FaceVerify(out_feature,out_feature);
-	cout<<score<<endl;
-	score = neon_FaceVerify(out_feature,out_feature);
-	cout<<score<<endl;
 	
   //float *sum =  (float*)memalign(16,4*sizeof(float));
   /*
