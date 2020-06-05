@@ -199,20 +199,14 @@ int main() {
 
   
 	
-	ifstream infile("/data/liujiangkuan/neon_test/feature_1.bin",std::ios::binary|std::ios::in);
-  float in_1[512*100];
-  while(infile.read((char*)in_1,512*100*sizeof(float))) {
-
-  }
+	ifstream infile("/data/liujiangkuan/neon_test/features.bin",std::ios::binary|std::ios::in);
+  float in_1[512*500];
+  infile.read((char*)in_1,512*500*sizeof(float));
+  float in_2[512*500];
+  infile.read((char*)in_2,512*500*sizeof(float));
+  
 	infile.close();
-	
-	infile.open("/data/liujiangkuan/neon_test/feature_2.bin",std::ios::binary|std::ios::in);
-  float in_2[512*100];
-  while(infile.read((char*)in_2,512*100*sizeof(float))) {
-
-  }
-	infile.close();
-	
+		
 	float *value = (float*)memalign(16,32*sizeof(float));
 	float *temp = (float*)memalign(16,32*sizeof(float));
 	float *result = (float*)memalign(16,32*sizeof(float));
@@ -245,31 +239,41 @@ int main() {
 	
 	neon_normalize(in_2,out_feature);
 
-	normalize(in_1+128,out_feature_1);
+	normalize(in_1,out_feature_1);
 
 	normalize(in_2,out_feature);
 	
 	
 	float score; 
 	start = NowMicros();
-	for(int i=0;i<100;i++)
-	score = FaceVerify(out_feature,out_feature_1);
+	for(int i=0;i<500;i++)
+	for(int j=0;j<500;j++) 
+	{
+		score = FaceVerify(in_1+j*512,in_2 + j*512);
+	}
 	end = NowMicros();
-	printf("%dus\n",(end-start));
+	printf("%fms\n",(end-start)/1000.0);
 	cout<<score<<endl;
 	
 	start = NowMicros();
-	for(int i=0;i<100;i++)
-	score = neon_FaceVerify(out_feature,out_feature_1);
+	for(int i=0;i<500;i++)
+	for(int j=0;j<500;j++) 
+	{
+		score = ncnn_normal(in_1+j*512,in_2 + j*512);
+	}
 	end = NowMicros();
 	
-	printf("%dus\n",(end-start));
-	
+	printf("%fms\n",(end-start)/1000.0);
+	cout<<score<<endl;
 	start = NowMicros();
-	for(int i=0;i<100;i++)
-	score = ncnn_normal(out_feature,out_feature_1);
+	for(int i=0;i<500;i++)
+	for(int j=0;j<500;j++) 
+	{
+		score = neon_FaceVerify(in_1+j*512,in_2 + j*512);
+	}
 	end = NowMicros();
-	printf("%dus\n",(end-start));
+	printf("%fms\n",(end-start)/1000.0);
+	cout<<score<<endl;
 	
 	
   //float *sum =  (float*)memalign(16,4*sizeof(float));
